@@ -1,7 +1,6 @@
 package services;
 
 import com.vmware.xenon.common.*;
-import com.vmware.xenon.services.common.ExampleService;
 
 /**
  * Created by sbai on 5/18/16.
@@ -16,9 +15,7 @@ public class UserAccountService extends StatefulService {
     }
 
     public static class UserAccountServiceState extends ServiceDocument {
-        @UsageOption(option = ServiceDocumentDescription.PropertyUsageOption.AUTO_MERGE_IF_NOT_NULL)
         public String userName;
-        @UsageOption(option = ServiceDocumentDescription.PropertyUsageOption.ID)
         public String email;
         public String password;
     }
@@ -28,39 +25,95 @@ public class UserAccountService extends StatefulService {
     }
 
     @Override
-    public void handleStart(Operation startPost) {
-        if (!startPost.hasBody()) {
-            startPost.fail(new IllegalArgumentException("initial state is required"));
+    public void handleStart(Operation start) {
+        System.out.println("In Start Handler");
+        if (!start.hasBody()) {
+            start.fail(new IllegalArgumentException("initial state is required"));
         } else {
-            UserAccountServiceState s = startPost.getBody(UserAccountServiceState.class);
+            UserAccountServiceState s = start.getBody(UserAccountServiceState.class);
             if (s.email == null || s.password == null) {
-                startPost.fail(new IllegalArgumentException("email and password are required"));
+                start.fail(new IllegalArgumentException("email and password are required"));
             } else {
-                startPost.complete();
+                start.complete();
             }
         }
     }
 
     @Override
+    public void handlePost(Operation post) {
+        System.out.println("In Post Handler");
+    }
+
+    @Override
     public void handlePatch(Operation patch) {
-        updateState(patch);
+        System.out.println("In Patch Handler");
+
+        updateState(patch, false);
 
         patch.complete();
     }
 
-    private void updateState(Operation update) {
-        UserAccountServiceState body = getBody(update);
+    @Override
+    public void handlePut(Operation put) {
+        System.out.println("In Put Handler");
 
-        if (body != null) {
-            UserAccountServiceState current = getState(update);
-            updateUserName(body, current);
-            update.setBody(current);
+        updateState(put, true);
+
+        put.complete();
+    }
+
+    @Override
+    public void handleDelete(Operation delete) {
+        System.out.println("In Delete Handler");
+
+        if (delete.hasBody()) {
+            UserAccountServiceState body = delete.getBody(UserAccountServiceState.class);
+            UserAccountServiceState current = getState(delete);
+            if (current != null && body.documentExpirationTimeMicros > 0) {
+                current.documentExpirationTimeMicros = body.documentExpirationTimeMicros;
+            }
+        }
+
+        delete.complete();
+    }
+
+    private void updateState(Operation update, boolean force) {
+        UserAccountServiceState body = update.getBody(UserAccountServiceState.class);
+        UserAccountServiceState current = getState(update);
+
+        if (current != null) {
+            updateUserName(body, current, force);
+            updateEmail(body, current, force);
+            updatePassword(body, current, force);
+        }
+
+        update.setBody(current);
+    }
+
+    private void updateUserName(UserAccountServiceState body, UserAccountServiceState
+            current, boolean force) {
+        if (body != null && body.userName != null) {
+            current.userName = body.userName;
+        } else if (force) {
+            current.userName = null;
         }
     }
 
-    private void updateUserName(UserAccountServiceState body, UserAccountServiceState current) {
-        if (body.userName != null) {
-            current.userName = body.userName;
+    private void updateEmail(UserAccountServiceState body, UserAccountServiceState
+            current, boolean force) {
+        if (body != null && body.email != null) {
+            current.email = body.email;
+        } else if (force) {
+            current.email = null;
+        }
+    }
+
+    private void updatePassword(UserAccountServiceState body, UserAccountServiceState
+            current, boolean force) {
+        if (body != null && body.password != null) {
+            current.password = body.password;
+        } else if (force) {
+            current.password = null;
         }
     }
 }
