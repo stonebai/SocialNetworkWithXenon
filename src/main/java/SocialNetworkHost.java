@@ -1,5 +1,6 @@
 import com.vmware.xenon.common.ServiceHost;
 import com.vmware.xenon.services.common.RootNamespaceService;
+import services.UserAccountQueryService;
 import services.UserAccountService;
 
 import java.util.logging.Level;
@@ -38,6 +39,8 @@ public class SocialNetworkHost extends ServiceHost {
         startDefaultCoreServicesSynchronously();
 
         super.startFactory(UserAccountService.class, UserAccountService::createFactory);
+
+        super.startFactory(UserAccountQueryService.class, UserAccountQueryService::createFactory);
 
         super.startService(new RootNamespaceService());
 

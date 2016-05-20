@@ -6,7 +6,7 @@ import java.util.*;
 
 /**
  * Created by sbai on 5/18/16.
- * This is the factory service used for managing user account.
+ * This is the factory service used to manage user account.
  */
 public class UserAccountService extends StatefulService {
 
@@ -17,6 +17,7 @@ public class UserAccountService extends StatefulService {
     }
 
     public static class UserAccountServiceState extends ServiceDocument {
+        public static final String FIELD_NAME_USERNAME = "userName";
         public String userName;
         public String email;
         public String password;
@@ -31,16 +32,16 @@ public class UserAccountService extends StatefulService {
     }
 
     @Override
-    public void handleStart(Operation start) {
+    public void handleStart(Operation startPost) {
         System.out.println("In Start Handler");
-        if (!start.hasBody()) {
-            start.fail(new IllegalArgumentException("initial state is required"));
+        if (!startPost.hasBody()) {
+            startPost.fail(new IllegalArgumentException("initial state is required"));
         } else {
-            UserAccountServiceState s = start.getBody(UserAccountServiceState.class);
+            UserAccountServiceState s = startPost.getBody(UserAccountServiceState.class);
             if (s.email == null || s.password == null) {
-                start.fail(new IllegalArgumentException("email and password are required"));
+                startPost.fail(new IllegalArgumentException("email and password are required"));
             } else {
-                start.complete();
+                startPost.complete();
             }
         }
     }
