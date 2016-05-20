@@ -6,6 +6,9 @@ import com.vmware.xenon.services.common.ServiceUriPaths;
 import com.vmware.xenon.services.common.TaskService;
 
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Created by sbai on 5/19/16.
@@ -13,7 +16,15 @@ import java.net.URI;
 public class UserAccountQueryService
         extends TaskService<UserAccountQueryService.UserAccountQueryServiceState> {
 
-    public static final String FACTORY_LINK = "user-accounts-search";
+    public enum SubStage {
+        QUERY, ADD_TAGS
+    }
+
+    public enum Type {
+        QUERY_ONLY, QUERY_ADD_TAGS
+    }
+
+    public static final String FACTORY_LINK = "/user-accounts-search";
 
     public static FactoryService createFactory() {
         return FactoryService.create(UserAccountQueryService.class);
@@ -21,12 +32,44 @@ public class UserAccountQueryService
 
     public static class UserAccountQueryServiceState extends TaskService.TaskServiceState {
         @UsageOption(option = ServiceDocumentDescription.PropertyUsageOption.AUTO_MERGE_IF_NOT_NULL)
-        public TaskState state;
+        public SubStage stage;
+        public Type type;
+        public String userName;
         public QueryTask queryTask;
+        public List<String> results;
     }
 
     public UserAccountQueryService() {
         super(UserAccountQueryServiceState.class);
+//        toggleOption(ServiceOption.PERSISTENCE, true);
+//        toggleOption(ServiceOption.REPLICATION, true);
+//        toggleOption(ServiceOption.INSTRUMENTATION, true);
+//        toggleOption(ServiceOption.OWNER_SELECTION, true);
+    }
+
+    @Override
+    public void handleStart(Operation startPost) {
+        if (startPost.hasBody()) {
+            UserAccountQueryServiceState body = startPost.getBody(UserAccountQueryServiceState
+                    .class);
+            if (body.type != null && body.userName != null) {
+                if (body.type == Type.QUERY_ONLY) {
+                    syncQueryUserName(body.userName, startPost);
+                } else if (body.type == Type.QUERY_ADD_TAGS){
+                    startPost.complete();
+                    sendSelfPatch(body, TaskState.TaskStage.STARTED, subStageSetter(SubStage.QUERY));
+                } else {
+                    startPost.fail(new IllegalArgumentException("Type: %s is not implemented"));
+                }
+            } else {
+                if (body.userName != null) logInfo(body.userName);
+                if (body.type != null) logInfo(body.type.toString());
+                startPost.fail(new IllegalArgumentException("type and userNAme are required"));
+            }
+
+        } else {
+            startPost.fail(new IllegalArgumentException("Initial state is required"));
+        }
     }
 
     @Override
@@ -34,9 +77,50 @@ public class UserAccountQueryService
         UserAccountQueryServiceState body = patch.getBody(UserAccountQueryServiceState.class);
         UserAccountQueryServiceState current = getState(patch);
 
-        validateTransition(patch, current, body);
+        if (validateTransition(patch, current, body)) {
+            updateState(current, body);
+        }
 
+        updateState(current, body);
+        patch.complete();
 
+        switch (body.taskInfo.stage) {
+            case CREATED:
+                logInfo("In created stage");
+                break;
+            case STARTED:
+                logInfo("In started stage");
+                handleSubstage(body);
+                break;
+            case CANCELLED:
+                logInfo("In cancelled stage");
+                break;
+            case FINISHED:
+                logInfo("In finished stage");
+                break;
+            case FAILED:
+                logInfo("In failed stage");
+                break;
+            default:
+                logInfo("Unexpected stage: %s", body.taskInfo.stage.toString());
+                break;
+        }
+    }
+
+    private void handleSubstage(UserAccountQueryServiceState body) {
+        switch (body.stage) {
+            case QUERY:
+                logInfo("In stage query");
+                asyncQueryUserName(body.userName, body);
+                break;
+            case ADD_TAGS:
+                logInfo("In stage add tags");
+                asyncAddTags(body);
+                break;
+            default:
+                logInfo("Unexpected stage: %s", body.stage.toString());
+                break;
+        }
     }
 
     protected UserAccountQueryServiceState validateStartPost(Operation startPost) {
@@ -44,8 +128,12 @@ public class UserAccountQueryService
 
         if (task != null) {
             if (ServiceHost.isServiceCreate(startPost)) {
-                if (task.state != null) {
+                if (task.stage != null) {
                     startPost.fail(new IllegalArgumentException("Do not specify task state"));
+                    return null;
+                }
+                if (task.queryTask != null) {
+                    startPost.fail(new IllegalArgumentException("Do not specify task query"));
                     return null;
                 }
             }
@@ -56,21 +144,18 @@ public class UserAccountQueryService
 
     protected boolean validateTransition(Operation patch, UserAccountQueryServiceState current,
                                          UserAccountQueryServiceState body) {
-        if (!super.validateTransition(patch, current, body)) {
-            logInfo("Super transition validation fail:\n%s\n\n%s", current.toString(), body
-                    .toString());
-        } else {
-            if (current != null && current.state != null) {
-                logInfo("The current state is %s", current.state.toString());
-            }
-            if (current != null && current.taskInfo != null && current.taskInfo.stage != null) {
-                logInfo("The actual current task stage is %s", current.taskInfo.stage.toString());
-            }
-            if (body != null && body.state != null) {
-                logInfo("The body state is %s", body.state.toString());
-            }
-            if (body != null && body.taskInfo != null && body.taskInfo.stage != null) {
-                logInfo("The request body task stage is %s", current.taskInfo.stage.toString());
+        super.validateTransition(patch, current, body);
+        if (body.taskInfo.stage == TaskState.TaskStage.STARTED && body.stage == null) {
+            patch.fail(new IllegalArgumentException("Missing stage"));
+            return false;
+        }
+        if (current.taskInfo != null && current.taskInfo.stage != null) {
+            if (current.taskInfo.stage == TaskState.TaskStage.STARTED
+                    && body.taskInfo.stage == TaskState.TaskStage.STARTED) {
+                if (current.stage.ordinal() > body.stage.ordinal()) {
+                    patch.fail(new IllegalArgumentException("Task stage cannot move backwards"));
+                    return false;
+                }
             }
         }
 
@@ -78,23 +163,32 @@ public class UserAccountQueryService
     }
 
     protected void initializeState(UserAccountQueryServiceState task, Operation taskOperation) {
-        task.state = TaskState.create();
+        task.stage = SubStage.QUERY;
         super.initializeState(task, taskOperation);
     }
 
-    private void queryUserName(String userName, Operation patch) {
-        QueryTask.Query userNameQuery = QueryTask.Query.Builder.create()
-                .addFieldClause(ServiceDocument.FIELD_NAME_KIND, Utils.buildKind
-                        (UserAccountService.UserAccountServiceState.class))
-                .addFieldClause(UserAccountService.UserAccountServiceState.FIELD_NAME_USERNAME,
-                        userName)
-                .build();
+    private void syncQueryUserName(String userName, Operation task) {
+        QueryTask queryTask = generateUserNameQuery(userName);
+        URI queryTaskUri = generateQueryURI();
 
-        QueryTask queryTask = QueryTask.Builder.createDirectTask()
-                .setQuery(userNameQuery)
-                .build();
+        Operation postQuery = Operation.createPost(queryTaskUri)
+                .setBody(queryTask)
+                .setCompletion((operation, error) -> {
+                    if (error != null) {
+                        task.fail(new Throwable("Query Failed:\n" + error.toString()));
+                    } else {
+                        task.getBody(UserAccountQueryServiceState.class).results = operation
+                                .getBody(QueryTask.class).results.documentLinks;
+                        task.complete();
+                    }
+                });
 
-        URI queryTaskUri = UriUtils.buildUri(getHost(), ServiceUriPaths.CORE_QUERY_TASKS);
+        sendRequest(postQuery);
+    }
+
+    private void asyncQueryUserName(String userName, UserAccountQueryServiceState task) {
+        QueryTask queryTask = generateUserNameQuery(userName);
+        URI queryTaskUri = generateQueryURI();
 
         Operation postQuery = Operation.createPost(queryTaskUri)
                 .setBody(queryTask)
@@ -102,12 +196,66 @@ public class UserAccountQueryService
                     if (error != null) {
                         logInfo("User name query fail: %s\n%s", userName, error.toString());
                     } else {
-                        QueryTask queryResponse = operation.getBody(QueryTask.class);
-                        patch.setBody(queryResponse);
+                        task.queryTask = operation.getBody(QueryTask.class);
+                        sendSelfPatch(task, TaskState.TaskStage.STARTED, subStageSetter(SubStage
+                                .ADD_TAGS));
                     }
                 });
-        
-        getHost().sendRequest(postQuery);
+
+        sendRequest(postQuery);
     }
 
+    private void asyncAddTags(UserAccountQueryServiceState task) {
+        if (task.queryTask.results == null) {
+            sendSelfFailurePatch(task, "Query task service returned null results");
+        } else if (task.queryTask.results.documentLinks == null) {
+            sendSelfFailurePatch(task, "Query task service returned null documentLinks");
+        } else if (task.queryTask.results.documentLinks.size() == 0) {
+            sendSelfFailurePatch(task, "Query task service returned 0 documentLinks");
+        } else {
+            List<Operation> operations = new ArrayList<>();
+            UserAccountService.UserAccountServiceState state = new UserAccountService
+                    .UserAccountServiceState();
+            state.tags.add("tag added by query service");
+            for (String service : task.queryTask.results.documentLinks) {
+                URI serviceUri = UriUtils.buildUri(getHost(), service);
+                Operation operation = Operation.createPost(serviceUri);
+                operation.setBody(state);
+                operations.add(operation);
+            }
+
+            OperationJoin.create()
+                    .setOperations(operations)
+                    .setCompletion((operation, error) -> {
+                        if (error != null && !error.isEmpty()) {
+                            sendSelfFailurePatch(task, String.format("%d operations failed", error
+                                    .size
+                                    ()));
+                        } else {
+                            sendSelfPatch(task, TaskState.TaskStage.FINISHED, null);
+                        }
+                    }).sendWith(this);
+        }
+    }
+
+    private QueryTask generateUserNameQuery(String userName) {
+        QueryTask.Query.Builder builder = QueryTask.Query.Builder.create()
+                .addKindFieldClause(UserAccountService.UserAccountServiceState.class)
+                .addFieldClause(UserAccountService.UserAccountServiceState.FIELD_NAME_USERNAME,
+                        userName);
+
+        QueryTask.Query userNameQuery = builder.build();
+
+        return QueryTask.Builder.createDirectTask()
+                .setQuery(userNameQuery)
+                .build();
+    }
+
+    private URI generateQueryURI() {
+        return UriUtils.buildUri(getHost(), ServiceUriPaths.CORE_QUERY_TASKS);
+    }
+
+    private Consumer<UserAccountQueryServiceState> subStageSetter(SubStage substage) {
+        return taskState -> taskState.stage = substage;
+    }
 }

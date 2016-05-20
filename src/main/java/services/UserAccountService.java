@@ -29,6 +29,10 @@ public class UserAccountService extends StatefulService {
 
     public UserAccountService() {
         super(UserAccountServiceState.class);
+        toggleOption(ServiceOption.PERSISTENCE, true);
+//        toggleOption(ServiceOption.REPLICATION, true);
+//        toggleOption(ServiceOption.INSTRUMENTATION, true);
+//        toggleOption(ServiceOption.OWNER_SELECTION, true);
     }
 
     @Override
