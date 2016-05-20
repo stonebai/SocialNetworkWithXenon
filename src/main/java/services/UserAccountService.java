@@ -92,6 +92,10 @@ public class UserAccountService extends StatefulService {
         delete.complete();
     }
 
+    /**
+     * add the input tags and key-value pairs to the current state
+     * @param add the operation which will be added more tags or key-value pairs
+     */
     private void addToState(Operation add) {
         UserAccountServiceState body = add.getBody(UserAccountServiceState.class);
         UserAccountServiceState current = getState(add);
@@ -104,6 +108,11 @@ public class UserAccountService extends StatefulService {
         add.setBody(current);
     }
 
+    /**
+     * update the current state with the input request body.
+     * @param update the operation with input request in it.
+     * @param force whether force the update to happen.
+     */
     private void updateState(Operation update, boolean force) {
         UserAccountServiceState body = update.getBody(UserAccountServiceState.class);
         UserAccountServiceState current = getState(update);
@@ -117,6 +126,11 @@ public class UserAccountService extends StatefulService {
         update.setBody(current);
     }
 
+    /**
+     * update the key-value pairs.
+     * @param body the request body which will be used to update current state
+     * @param current the current state
+     */
     private void updateKeyValues(UserAccountServiceState body, UserAccountServiceState current) {
         if (body != null && body.keyValues != null && !body.keyValues.isEmpty()) {
             for (Map.Entry<String, String> entry : body.keyValues.entrySet()) {
@@ -125,6 +139,11 @@ public class UserAccountService extends StatefulService {
         }
     }
 
+    /**
+     * update the tags.
+     * @param body the request body which will be used to update current state
+     * @param current the current state
+     */
     private void updateTags(UserAccountServiceState body, UserAccountServiceState current) {
         if (body != null && body.tags != null && !body.tags.isEmpty()) {
             for (String tag : body.tags) {
@@ -133,6 +152,12 @@ public class UserAccountService extends StatefulService {
         }
     }
 
+    /**
+     * update field user name.
+     * @param body the request body which will be used to update current state
+     * @param current the current state
+     * @param force whether force the update to happen
+     */
     private void updateUserName(UserAccountServiceState body, UserAccountServiceState
             current, boolean force) {
         if (body != null && body.userName != null) {
@@ -142,6 +167,12 @@ public class UserAccountService extends StatefulService {
         }
     }
 
+    /**
+     * update field email.
+     * @param body the request body which will be used to update current state
+     * @param current the current state
+     * @param force whether force the update to happen
+     */
     private void updateEmail(UserAccountServiceState body, UserAccountServiceState
             current, boolean force) {
         if (body != null && body.email != null) {
@@ -151,6 +182,12 @@ public class UserAccountService extends StatefulService {
         }
     }
 
+    /**
+     * update field password.
+     * @param body the request body which will be used to update current state
+     * @param current the current state
+     * @param force whether force the update to happen
+     */
     private void updatePassword(UserAccountServiceState body, UserAccountServiceState
             current, boolean force) {
         if (body != null && body.password != null) {

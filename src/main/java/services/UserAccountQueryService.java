@@ -12,14 +12,20 @@ import java.util.function.Consumer;
 
 /**
  * Created by sbai on 5/19/16.
+ * This is the factory service used to query user account service by user name.
  */
 public class UserAccountQueryService
         extends TaskService<UserAccountQueryService.UserAccountQueryServiceState> {
-
+    /**
+     * Specify the sub stage of the current task's progress.
+     */
     public enum SubStage {
         QUERY, ADD_TAGS
     }
 
+    /**
+     * Specify the type of the current task.
+     */
     public enum Type {
         QUERY_ONLY, QUERY_ADD_TAGS
     }
@@ -107,6 +113,10 @@ public class UserAccountQueryService
         }
     }
 
+    /**
+     * Handle different sub stages.
+     * @param body specifies the user account query service state.
+     */
     private void handleSubstage(UserAccountQueryServiceState body) {
         switch (body.stage) {
             case QUERY:
@@ -123,6 +133,11 @@ public class UserAccountQueryService
         }
     }
 
+    /**
+     * specify if a start post operation is valid or not.
+     * @param startPost specifies the service document initial state.
+     * @return whether the initial state is valid.
+     */
     protected UserAccountQueryServiceState validateStartPost(Operation startPost) {
         UserAccountQueryServiceState task = super.validateStartPost(startPost);
 
@@ -142,6 +157,13 @@ public class UserAccountQueryService
         return task;
     }
 
+    /**
+     * specify if a transition state is valid or not.
+     * @param patch the current patch operation.
+     * @param current the current state of query service.
+     * @param body the state in the request.
+     * @return whether the transition state is valid.
+     */
     protected boolean validateTransition(Operation patch, UserAccountQueryServiceState current,
                                          UserAccountQueryServiceState body) {
         super.validateTransition(patch, current, body);
@@ -162,11 +184,21 @@ public class UserAccountQueryService
         return true;
     }
 
+    /**
+     * do the initialization, specify the first stage of the query.
+     * @param task the body of the operation.
+     * @param taskOperation the operation.
+     */
     protected void initializeState(UserAccountQueryServiceState task, Operation taskOperation) {
         task.stage = SubStage.QUERY;
         super.initializeState(task, taskOperation);
     }
 
+    /**
+     * query services with the specified user name in a synchronous way.
+     * @param userName the user name which appears in the user account service.
+     * @param task the current operation.
+     */
     private void syncQueryUserName(String userName, Operation task) {
         QueryTask queryTask = generateUserNameQuery(userName);
         URI queryTaskUri = generateQueryURI();
@@ -186,6 +218,11 @@ public class UserAccountQueryService
         sendRequest(postQuery);
     }
 
+    /**
+     * query services with the specified user name in an asynchronous way.
+     * @param userName the user name which is used to query services and add tags to them.
+     * @param task the document which will be modified and passed to next iteration.
+     */
     private void asyncQueryUserName(String userName, UserAccountQueryServiceState task) {
         QueryTask queryTask = generateUserNameQuery(userName);
         URI queryTaskUri = generateQueryURI();
@@ -205,6 +242,10 @@ public class UserAccountQueryService
         sendRequest(postQuery);
     }
 
+    /**
+     * add tags to the services in an asynchronous way.
+     * @param task the document which will be modified and passed to next iteration.
+     */
     private void asyncAddTags(UserAccountQueryServiceState task) {
         if (task.queryTask.results == null) {
             sendSelfFailurePatch(task, "Query task service returned null results");
@@ -238,6 +279,11 @@ public class UserAccountQueryService
         }
     }
 
+    /**
+     * generate the query with the given user name.
+     * @param userName user name which appears in the user account services.
+     * @return the complete query.
+     */
     private QueryTask generateUserNameQuery(String userName) {
         QueryTask.Query.Builder builder = QueryTask.Query.Builder.create()
                 .addKindFieldClause(UserAccountService.UserAccountServiceState.class)
@@ -251,10 +297,19 @@ public class UserAccountQueryService
                 .build();
     }
 
+    /**
+     * generate the uri of the query service.
+     * @return the uri of the query service.
+     */
     private URI generateQueryURI() {
         return UriUtils.buildUri(getHost(), ServiceUriPaths.CORE_QUERY_TASKS);
     }
 
+    /**
+     * generate the stage information
+     * @param substage the specified sub stage
+     * @return the result which will be passed to next patch body
+     */
     private Consumer<UserAccountQueryServiceState> subStageSetter(SubStage substage) {
         return taskState -> taskState.stage = substage;
     }
