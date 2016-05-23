@@ -1,6 +1,7 @@
 package services;
 
 import com.vmware.xenon.common.*;
+import com.vmware.xenon.services.common.ServiceUriPaths;
 
 import java.util.*;
 
