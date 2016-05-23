@@ -11,6 +11,9 @@ public class UserService extends StatelessService {
 
     public static final String SELF_LINK = "/user";
 
+    /**
+     * The user account which should be the body of request
+     */
     private static class UserAccount {
         public String userName;
         public String email;
@@ -55,6 +58,10 @@ public class UserService extends StatelessService {
         delete.complete();
     }
 
+    /**
+     * print the request body
+     * @param userAccount input the user account object obtained from request body
+     */
     private void printBody(UserAccount userAccount) {
         System.out.println("User name: " + userAccount.userName);
         System.out.println("User email: " + userAccount.email);
