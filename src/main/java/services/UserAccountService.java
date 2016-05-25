@@ -1,7 +1,6 @@
 package services;
 
 import com.vmware.xenon.common.*;
-import com.vmware.xenon.services.common.ServiceUriPaths;
 
 import java.util.*;
 
@@ -18,7 +17,7 @@ public class UserAccountService extends StatefulService {
     }
 
     public static class UserAccountServiceState extends ServiceDocument {
-        public static final String FIELD_NAME_USERNAME = "userName";
+        static final String FIELD_NAME_USERNAME = "userName";
         public String userName;
         public String email;
         public String password;
